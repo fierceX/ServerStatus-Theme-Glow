@@ -26,7 +26,7 @@ export function isOnline(server: ServerData) {
 }
 
 export function isCountryFlagEmoji(text: string) {
-  const regex = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g
+  const regex = /[\uD800-\uDBFF][\uDC00-\uDFFF]/
   return regex.test(text)
 }
 

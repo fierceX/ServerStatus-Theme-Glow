@@ -1,9 +1,16 @@
+<script setup lang="ts">
+defineProps<{
+  value: number
+  max: number
+}>()
+</script>
+
 <template>
   <div
-    class="inline-block text-sm bg-gray-200 rounded-full overflow-hidden relative"
+    class="relative inline-block overflow-hidden rounded-full bg-gray-200 text-sm"
   >
     <div
-      class="px-2 text-sm transition-[width] duration-500 whitespace-nowrap"
+      class="whitespace-nowrap px-2 text-sm transition-[width] duration-500"
       :class="{
         'bg-gray-400/50': value / max < 0.8,
         'bg-orange-300': value / max >= 0.8 && value / max < 0.9,
@@ -17,10 +24,3 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-defineProps<{
-  value: number
-  max: number
-}>()
-</script>

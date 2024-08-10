@@ -1,7 +1,3 @@
-<template>
-  <VChart ref="chartRef" class="chart" :option="option" :autoresize="true" />
-</template>
-
 <script setup lang="ts">
 import type { ComposeOption } from 'echarts/core'
 import { use } from 'echarts/core'
@@ -106,6 +102,10 @@ function formatTime(time: number) {
   return `${hours}:${minutes}:${seconds}`
 }
 </script>
+
+<template>
+  <VChart ref="chartRef" class="chart" :option="option" :autoresize="true" />
+</template>
 
 <style>
 .chart {

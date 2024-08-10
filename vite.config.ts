@@ -18,11 +18,11 @@ export default defineConfig(({ mode }) => {
       vue(),
       AutoImport({
         imports: ['vue'],
-        dts: true,
+        dts: 'src/auto-imports.d.ts',
         vueTemplate: true,
       }),
       Components({
-        dts: true,
+        dts: 'src/components.d.ts',
       }),
     ],
     server: {
