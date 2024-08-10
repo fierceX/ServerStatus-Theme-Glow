@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { useLocalStorage, useWindowSize } from '@vueuse/core'
-import type { ServerData } from './types'
-
-const JSON_API = '/json/stats.json'
-const CARD_WIDTH = 350
-const MIN_FETCH_INTERVAL = 500
+import type { ServerData } from '@/types'
+import { CARD_WIDTH, JSON_API, MIN_FETCH_INTERVAL } from '@/config'
 
 const { width: WindowWidth } = useWindowSize()
 
 const settings = useLocalStorage('sstl-settings', {
-  layout: 'grid',
+  layout: 'grid' as 'grid' | 'flex' | 'list',
   compactMode: false,
   showCpuChart: false,
-  cpuChartHistoryKeep: 300,
+  useMonthlyTraffic: true,
 }, {
   mergeDefaults: true,
 })
@@ -130,24 +127,11 @@ function fetchData() {
           <SettingItem title="精简显示">
             <Switch v-model="settings.compactMode" />
           </SettingItem>
-          <SettingItem title="CPU图表">
+          <SettingItem v-show="settings.layout !== 'list'" title="CPU图表">
             <Switch v-model="settings.showCpuChart" />
           </SettingItem>
-          <SettingItem v-show="settings.showCpuChart" title="记录时间">
-            <select v-model="settings.cpuChartHistoryKeep">
-              <option value="60">
-                1分钟
-              </option>
-              <option value="180">
-                3分钟
-              </option>
-              <option value="300">
-                5分钟
-              </option>
-              <option value="600">
-                10分钟
-              </option>
-            </select>
+          <SettingItem title="显示周期流量">
+            <Switch v-model="settings.useMonthlyTraffic" />
           </SettingItem>
         </div>
       </div>
@@ -177,6 +161,7 @@ function fetchData() {
           :server="server"
           :compact-mode="settings.compactMode"
           :show-cpu-chart="settings.showCpuChart"
+          :use-monthly-traffic="settings.useMonthlyTraffic"
           :class="{
             'col-span-1': settings.layout === 'grid',
             'min-w-[300px] flex-1': settings.layout === 'flex',
@@ -188,6 +173,7 @@ function fetchData() {
           v-for="server, index in serverData.servers" :key="index"
           :server="server"
           :compact-mode="settings.compactMode"
+          :use-monthly-traffic="settings.useMonthlyTraffic"
           class="col-span-1"
         />
       </template>

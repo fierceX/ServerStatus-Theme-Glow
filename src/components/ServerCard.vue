@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CPU_HISTORY_KEEP_TIME } from '@/config'
 import type { ServerData } from '@/types'
 import { formatBytes, formatTime, hasLoadData, isCountryFlagEmoji, isOnline, parseLabels } from '@/utils'
 
@@ -6,17 +7,28 @@ const props = defineProps<{
   server: ServerData
   compactMode: boolean
   showCpuChart: boolean
+  useMonthlyTraffic: boolean
 }>()
 
 const StatusChart = defineAsyncComponent(() => import('@/components/StatusChart.vue'))
 
-const CPU_HISTORY_KEEP_TIME = 300
 let cpuHistoryLastUpdated = 0
 
 const cpuHistory = ref<any[]>([])
 
 const labels = computed(() => parseLabels(props.server.labels))
 const noLoadData = computed(() => hasLoadData(props.server))
+const networkTraffic = computed(() => {
+  return props.useMonthlyTraffic && props.server.last_network_in
+    ? {
+        in: props.server.network_in - props.server.last_network_in,
+        out: props.server.network_out - props.server.last_network_out,
+      }
+    : {
+        in: props.server.network_in,
+        out: props.server.network_out,
+      }
+})
 
 watch(() => props.server, () => {
   if (props.server.latest_ts && props.server.cpu) {
@@ -157,10 +169,10 @@ watch(() => props.server, () => {
     <div v-if="server.network_in !== undefined && !compactMode" class="flex items-center gap-2">
       流量
       <Bandage class="flex items-center">
-        <IconDownload class="size-4" />{{ formatBytes(server.network_in, 1) }}
+        <IconDownload class="size-4" />{{ formatBytes(networkTraffic.in, 1) }}
       </Bandage>
       <Bandage class="flex items-center">
-        <IconUpload class="size-4" />{{ formatBytes(server.network_out, 1) }}
+        <IconUpload class="size-4" />{{ formatBytes(networkTraffic.out, 1) }}
       </Bandage>
     </div>
     <div v-if="server.swap_total !== undefined && !compactMode">

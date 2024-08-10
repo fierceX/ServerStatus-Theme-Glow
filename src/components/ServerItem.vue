@@ -5,10 +5,22 @@ import { formatBytes, formatTime, hasLoadData, isCountryFlagEmoji, isOnline, par
 const props = defineProps<{
   server: ServerData
   compactMode: boolean
+  useMonthlyTraffic: boolean
 }>()
 
 const labels = computed(() => parseLabels(props.server.labels))
 const noLoadData = computed(() => hasLoadData(props.server))
+const networkTraffic = computed(() => {
+  return props.useMonthlyTraffic && props.server.last_network_in
+    ? {
+        in: props.server.network_in - props.server.last_network_in,
+        out: props.server.network_out - props.server.last_network_out,
+      }
+    : {
+        in: props.server.network_in,
+        out: props.server.network_out,
+      }
+})
 </script>
 
 <template>
@@ -107,10 +119,10 @@ const noLoadData = computed(() => hasLoadData(props.server))
         </Bandage>
       </template>
       <Bandage class="flex items-center">
-        下载 <IconDownload class="size-4" />{{ formatBytes(server.network_in, 1) }}
+        下载 <IconDownload class="size-4" />{{ formatBytes(networkTraffic.in, 1) }}
       </Bandage>
       <Bandage class="flex items-center">
-        上传 <IconUpload class="size-4" />{{ formatBytes(server.network_out, 1) }}
+        上传 <IconUpload class="size-4" />{{ formatBytes(networkTraffic.out, 1) }}
       </Bandage>
       <Bandage v-if="server.tcp_count !== undefined">
         TCP {{ server.tcp_count }}
