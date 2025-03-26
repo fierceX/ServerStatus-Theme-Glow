@@ -195,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ServerData } from '@/types'
+import type { ServerData, DiskInfo } from '@/types'
 import { formatBytes, formatTime, hasLoadData, isCountryFlagEmoji, isOnline, parseLabels } from '@/utils'
 import StorageInfo from './StorageInfo.vue'
 
