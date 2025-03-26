@@ -129,7 +129,7 @@
       <Bandage v-if="server.thread_count !== undefined">
         线程 {{ server.thread_count }}
       </Bandage>
-      <Bandage v-if="server.swap_total !== undefined">
+      <Bandage v-if="server.swap_total !== undefined && server.swap_total > 0">
         SWAP {{ formatBytes(server.swap_used * 1024) }} / {{ formatBytes(server.swap_total * 1024) }}
       </Bandage>
     </div>

@@ -135,7 +135,7 @@
         <IconUpload class="w-4 h-4" />{{ formatBytes(server.network_out, 1) }}
       </Bandage>
     </div>
-    <div v-if="server.swap_total !== undefined && !compactMode">
+    <div v-if="server.swap_total !== undefined && server.swap_total > 0 && !compactMode">
       SWAP
       <Bandage>
         {{ formatBytes(server.swap_used * 1024) }} / {{ formatBytes(server.swap_total * 1024) }}
