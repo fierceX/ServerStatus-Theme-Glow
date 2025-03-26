@@ -95,10 +95,13 @@
       </Progress>
     </div>
     <template v-if="server.disks?.length">
-      <div v-for="disk in normalDisks" :key="disk.name" class="flex items-center gap-2">
-        <span class="text-sm">
-          {{ disk.name }}
-          <span class="text-gray-500">({{ disk.mount_point }})</span>
+      <div class="flex items-center gap-2">
+        存储设备
+      </div>
+      <div v-for="disk in server.disks" :key="disk.name" class="flex items-center gap-2">
+        <span class="text-sm text-blue-500 font-medium">
+          {{ disk.name.replace('zpool-', '') }}
+          <span class="text-gray-500 font-normal">({{ disk.mount_point }})</span>
         </span>
         <Progress
           :value="disk.used"
@@ -106,47 +109,14 @@
           class="flex-1"
           :class="{
             'progress-danger': getDiskUsagePercent(disk) >= 90,
-            'progress-warning': getDiskUsagePercent(disk) >= 70
+            'progress-warning': getDiskUsagePercent(disk) >= 70,
+            'progress-zfs': getDiskUsagePercent(disk) < 70
           }"
         >
           {{ formatBytes(disk.used) }} / {{ formatBytes(disk.total) }}
         </Progress>
       </div>
-
-      <template v-if="zfsDisks.length">
-        <div class="text-sm font-medium text-gray-600 mt-2 border-b pb-1">
-          ZFS 存储池
-        </div>
-        <div v-for="disk in zfsDisks" :key="disk.name" class="flex items-center gap-2">
-          <span class="text-sm text-blue-500 font-medium">
-            {{ disk.name.replace('zpool-', '') }}
-            <span class="text-gray-500 font-normal">({{ disk.mount_point }})</span>
-          </span>
-          <Progress
-            :value="disk.used"
-            :max="disk.total"
-            class="flex-1"
-            :class="{
-              'progress-danger': getDiskUsagePercent(disk) >= 90,
-              'progress-warning': getDiskUsagePercent(disk) >= 70,
-              'progress-zfs': getDiskUsagePercent(disk) < 70
-            }"
-          >
-            {{ formatBytes(disk.used) }} / {{ formatBytes(disk.total) }}
-          </Progress>
-        </div>
-      </template>
     </template>
-    <div v-else-if="server.hdd_total !== undefined" class="flex items-center gap-2">
-      硬盘
-      <Progress
-        :value="server.hdd_used"
-        :max="server.hdd_total"
-        class="flex-1"
-      >
-        {{ formatBytes(server.hdd_used * 1024 * 1024) }} / {{ formatBytes(server.hdd_total * 1024 * 1024) }}
-      </Progress>
-    </div>
     <div v-if="server.network_rx !== undefined" class="flex items-center gap-2">
       网络
       <Bandage class="flex items-center">
@@ -214,19 +184,6 @@ const cpuHistory = ref<any[]>([])
 
 const labels = computed(() => parseLabels(props.server.labels))
 const noLoadData = computed(() => hasLoadData(props.server))
-
-const normalDisks = computed(() => 
-  props.server.disks?.filter(disk => 
-    !disk.name.startsWith('zpool-') && 
-    disk.file_system.toLowerCase() !== 'zfs'
-  ) || []
-)
-
-const zfsDisks = computed(() => 
-  props.server.disks?.filter(disk => 
-    disk.name.startsWith('zpool-')
-  ) || []
-)
 
 function getDiskUsagePercent(disk: DiskInfo) {
   return Math.round((disk.used / disk.total) * 100)
