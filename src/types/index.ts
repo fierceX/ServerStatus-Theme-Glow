@@ -1,3 +1,12 @@
+export interface DiskInfo {
+  name: string
+  mount_point: string
+  file_system: string
+  total: number
+  used: number
+  free: number
+}
+
 export interface ServerData {
   name: string
   alias: string
@@ -33,4 +42,5 @@ export interface ServerData {
   weight: number
   latest_ts: number
   si: boolean
+  disks?: DiskInfo[]
 }
