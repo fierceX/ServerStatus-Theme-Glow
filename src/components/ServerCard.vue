@@ -158,16 +158,12 @@
         线程 {{ server.thread_count }}
       </Bandage>
     </div>
-    <div v-if="server.disks?.length && !compactMode" class="storage-section">
-      <StorageInfo :disks="server.disks" />
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { ServerData, DiskInfo } from '@/types'
 import { formatBytes, formatTime, hasLoadData, isCountryFlagEmoji, isOnline, parseLabels } from '@/utils'
-import StorageInfo from './StorageInfo.vue'
 
 const props = defineProps<{
   server: ServerData
