@@ -77,12 +77,30 @@
           {{ formatBytes(server.memory_used * 1024) }} / {{ formatBytes(server.memory_total * 1024) }}
         </Progress>
       </div>
-      <div v-if="server.hdd_total !== undefined" class="flex-1 flex items-center gap-2">
-        <IconDisk class="w-5 h-5 text-gray-600" />
-        <Progress :value="server.hdd_used" :max="server.hdd_total" class="flex-1">
-          {{ formatBytes(server.hdd_used * 1024 * 1024) }} / {{ formatBytes(server.hdd_total * 1024 * 1024) }}
-        </Progress>
-      </div>
+      <!-- 替换原有的硬盘显示部分 -->
+      <template v-if="server.disks?.length">
+        <div v-for="disk in server.disks" :key="disk.name" class="flex-1 flex items-center gap-2">
+          <IconDisk class="w-5 h-5 text-gray-600" />
+          <div class="flex-1">
+            <div class="text-sm text-blue-500 font-medium">
+              {{ disk.name.replace('zpool-', '') }}
+              <span class="text-gray-500 font-normal">({{ disk.mount_point }})</span>
+            </div>
+            <Progress
+              :value="disk.used"
+              :max="disk.total"
+              class="flex-1"
+              :class="{
+                'progress-danger': getDiskUsagePercent(disk) >= 90,
+                'progress-warning': getDiskUsagePercent(disk) >= 70,
+                'progress-zfs': getDiskUsagePercent(disk) < 70
+              }"
+            >
+              {{ formatBytes(disk.used) }} / {{ formatBytes(disk.total) }}
+            </Progress>
+          </div>
+        </div>
+      </template>
     </div>
     <div v-if="!compactMode" class="flex gap-1 flex-wrap mt-2">
       <template v-if="server.network_rx !== undefined">
@@ -119,7 +137,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ServerData } from '@/types'
+import type { ServerData, DiskInfo } from '@/types'
 import { formatBytes, formatTime, hasLoadData, isCountryFlagEmoji, isOnline, parseLabels } from '@/utils'
 
 const props = defineProps<{
@@ -129,4 +147,14 @@ const props = defineProps<{
 
 const labels = computed(() => parseLabels(props.server.labels))
 const noLoadData = computed(() => hasLoadData(props.server))
+
+function getDiskUsagePercent(disk: DiskInfo) {
+  return Math.round((disk.used / disk.total) * 100)
+}
 </script>
+
+<style scoped>
+.progress-zfs :deep(.progress-bar) {
+  @apply bg-blue-500;
+}
+</style>
