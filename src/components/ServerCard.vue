@@ -84,10 +84,6 @@
         {{ server.cpu }}%
       </Progress>
     </div>
-    <StatusChart 
-      v-if="showCpuChart" 
-      :data="[{ name: 'CPU', data: cpuHistory, color: '#10B981' }]" 
-    />
     <div v-if="server.memory_total !== undefined" class="flex items-center gap-2">
       内存
       <Progress
@@ -97,6 +93,13 @@
         {{ formatBytes(server.memory_used * 1024) }} / {{ formatBytes(server.memory_total * 1024) }}
       </Progress>
     </div>
+    <StatusChart 
+      v-if="showCpuChart" 
+      :data="[
+        { name: 'CPU', data: cpuHistory, color: '#10B981' },
+        { name: '内存', data: memoryHistory, color: '#6366F1' }
+      ]" 
+    />
     <template v-if="server.disks?.length">
       <div class="flex items-center gap-2">
         存储设备
@@ -192,7 +195,9 @@ const networkDownloadHistory = ref<any[]>([])
 let networkHistoryLastUpdated = 0
 
 const cpuHistory = ref<any[]>([])
-const networkHistory = ref<any[]>([])
+// 添加内存历史变量
+const memoryHistory = ref<any[]>([])
+let memoryHistoryLastUpdated = 0
 
 const labels = computed(() => parseLabels(props.server.labels))
 const noLoadData = computed(() => hasLoadData(props.server))
@@ -220,6 +225,28 @@ watch(() => props.server, () => {
 
     cpuHistory.value = list
     cpuHistoryLastUpdated = props.server.latest_ts
+  }
+
+  // 添加内存历史记录更新逻辑
+  if (props.server.latest_ts && props.server.memory_total !== undefined && props.server.memory_used !== undefined) {
+    if (props.server.latest_ts <= memoryHistoryLastUpdated)
+      return
+
+    const memoryUsage = (props.server.memory_used / props.server.memory_total) * 100
+    const list = memoryHistory.value.slice()
+    
+    list.push({
+      name: Date.now(),
+      value: [
+        props.server.latest_ts * 1000,
+        Math.round(memoryUsage * 100) / 100,
+      ],
+    })
+    while (list[0]?.name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
+      list.shift()
+
+    memoryHistory.value = list
+    memoryHistoryLastUpdated = props.server.latest_ts
   }
 
   // 添加网络历史记录更新逻辑

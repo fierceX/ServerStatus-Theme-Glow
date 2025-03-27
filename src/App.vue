@@ -46,7 +46,7 @@
           <SettingItem title="精简显示">
             <Switch v-model="settings.compactMode" />
           </SettingItem>
-          <SettingItem title="CPU图表">
+          <SettingItem title="历史图表">
             <Switch v-model="settings.showCpuChart" />
           </SettingItem>
           <SettingItem v-show="settings.showCpuChart" title="记录时间">
