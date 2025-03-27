@@ -138,11 +138,6 @@
       :format="formatBytes"
       class="network-chart"
     />
-    <StatusChart 
-      v-if="showCpuChart && server.network_rx !== undefined" 
-      :data="networkHistory" 
-      class="network-chart"
-    />
     <div v-if="server.network_in !== undefined && !compactMode" class="flex items-center gap-2">
       流量
       <Bandage class="flex items-center">
