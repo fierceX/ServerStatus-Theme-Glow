@@ -88,24 +88,6 @@
       v-if="showCpuChart" 
       :data="[{ name: 'CPU', data: cpuHistory, color: '#10B981' }]" 
     />
-    <div v-if="server.network_rx !== undefined" class="flex items-center gap-2">
-      网络
-      <Bandage class="flex items-center">
-        <IconDownload class="w-4 h-4" />{{ formatBytes(server.network_rx, 1) }}/s
-      </Bandage>
-      <Bandage class="flex items-center">
-        <IconUpload class="w-4 h-4" />{{ formatBytes(server.network_tx, 1) }}/s
-      </Bandage>
-    </div>
-    <StatusChart 
-      v-if="showCpuChart && server.network_rx !== undefined" 
-      :data="[
-        { name: '上传', data: networkUploadHistory, color: '#10B981' },
-        { name: '下载', data: networkDownloadHistory, color: '#3B82F6' }
-      ]"
-      :format="formatBytes"
-      class="network-chart"
-    />
     <div v-if="server.memory_total !== undefined" class="flex items-center gap-2">
       内存
       <Progress
@@ -147,6 +129,15 @@
         <IconUpload class="w-4 h-4" />{{ formatBytes(server.network_tx, 1) }}/s
       </Bandage>
     </div>
+    <StatusChart 
+      v-if="showCpuChart && server.network_rx !== undefined" 
+      :data="[
+        { name: '上传', data: networkUploadHistory, color: '#10B981' },
+        { name: '下载', data: networkDownloadHistory, color: '#3B82F6' }
+      ]"
+      :format="formatBytes"
+      class="network-chart"
+    />
     <StatusChart 
       v-if="showCpuChart && server.network_rx !== undefined" 
       :data="networkHistory" 
