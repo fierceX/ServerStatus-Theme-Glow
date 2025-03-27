@@ -72,9 +72,9 @@ watch(() => props.data, () => {
 
 const option: EChartsOption = {
   grid: {
-    left: 40,
+    left: 65,    // 增加左侧边距，给刻度值留出足够空间
     right: 20,
-    top: 10,
+    top: 25,     // 增加顶部边距，为图例留出空间
     bottom: 20,
   },
   tooltip: {
