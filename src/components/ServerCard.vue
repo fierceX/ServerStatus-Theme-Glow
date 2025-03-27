@@ -126,6 +126,11 @@
         <IconUpload class="w-4 h-4" />{{ formatBytes(server.network_tx, 1) }}/s
       </Bandage>
     </div>
+    <StatusChart 
+      v-if="showCpuChart && server.network_rx !== undefined" 
+      :data="networkHistory" 
+      class="network-chart"
+    />
     <div v-if="server.network_in !== undefined && !compactMode" class="flex items-center gap-2">
       流量
       <Bandage class="flex items-center">
@@ -175,8 +180,10 @@ const StatusChart = defineAsyncComponent(() => import('@/components/StatusChart.
 
 const CPU_HISTORY_KEEP_TIME = 300
 let cpuHistoryLastUpdated = 0
+let networkHistoryLastUpdated = 0
 
 const cpuHistory = ref<any[]>([])
+const networkHistory = ref<any[]>([])
 
 const labels = computed(() => parseLabels(props.server.labels))
 const noLoadData = computed(() => hasLoadData(props.server))
@@ -186,6 +193,7 @@ function getDiskUsagePercent(disk: DiskInfo) {
 }
 
 watch(() => props.server, () => {
+  // CPU 历史记录更新逻辑
   if (props.server.latest_ts && props.server.cpu) {
     if (props.server.latest_ts <= cpuHistoryLastUpdated)
       return
@@ -204,6 +212,26 @@ watch(() => props.server, () => {
     cpuHistory.value = list
     cpuHistoryLastUpdated = props.server.latest_ts
   }
+
+  // 添加网络历史记录更新逻辑
+  if (props.server.latest_ts && props.server.network_rx !== undefined && props.server.network_tx !== undefined) {
+    if (props.server.latest_ts <= networkHistoryLastUpdated)
+      return
+
+    const list = networkHistory.value.slice()
+    list.push({
+      name: Date.now(),
+      value: [
+        props.server.latest_ts * 1000,
+        props.server.network_rx + props.server.network_tx,
+      ],
+    })
+    while (list[0].name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
+      list.shift()
+
+    networkHistory.value = list
+    networkHistoryLastUpdated = props.server.latest_ts
+  }
 })
 </script>
 
@@ -214,5 +242,9 @@ watch(() => props.server, () => {
 
 .progress-zfs :deep(.progress-bar) {
   @apply bg-blue-500;
+}
+
+.network-chart {
+  @apply mt-2;
 }
 </style>
