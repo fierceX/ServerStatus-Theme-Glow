@@ -17,7 +17,12 @@ import {
 import VChart from 'vue-echarts'
 
 const props = defineProps<{
-  data: any[]
+  data: {
+    name: string
+    data: any[]
+    color: string
+  }[] | any[]
+  format?: (value: number, precision?: number) => string
 }>()
 
 use([
@@ -37,13 +42,32 @@ type EChartsOption = ComposeOption<
 const chartRef = ref<any>()
 
 watch(() => props.data, () => {
-  chartRef.value?.setOption({
-    series: [
-      {
+  if (Array.isArray(props.data) && props.data[0]?.name) {
+    // 多数据序列模式
+    chartRef.value?.setOption({
+      series: props.data.map(item => ({
+        name: item.name,
+        data: item.data,
+        type: 'line',
+        showSymbol: false,
+        lineStyle: {
+          color: item.color
+        },
+        itemStyle: {
+          color: item.color
+        }
+      }))
+    })
+  } else {
+    // 单数据序列模式（保持向后兼容）
+    chartRef.value?.setOption({
+      series: [{
         data: props.data,
-      },
-    ],
-  })
+        type: 'line',
+        showSymbol: false,
+      }]
+    })
+  }
 })
 
 const option: EChartsOption = {
@@ -56,12 +80,26 @@ const option: EChartsOption = {
   tooltip: {
     trigger: 'axis',
     formatter: (params: any) => {
-      params = params[0]
-      return `${formatTime(params.value[0])}: ${params.value[1]}%`
+      if (Array.isArray(params)) {
+        const time = formatTime(params[0].value[0])
+        const items = params.map((param: any) => {
+          const value = props.format 
+            ? props.format(param.value[1], 1) 
+            : `${param.value[1]}%`
+          return `${param.marker} ${param.seriesName}: ${value}`
+        }).join('<br/>')
+        return `${time}<br/>${items}`
+      }
+      return ''
     },
     axisPointer: {
       animation: false,
     },
+  },
+  legend: {
+    show: true,
+    top: 0,
+    right: 20,
   },
   xAxis: {
     type: 'time',
@@ -74,28 +112,32 @@ const option: EChartsOption = {
   },
   yAxis: {
     type: 'value',
-    max: (value: any) => {
-      return value.max <= 20
-        ? 20
-        : value.max <= 50
-          ? 50
-          : 100
-    },
     axisLabel: {
       hideOverlap: true,
       showMaxLabel: true,
       formatter: (value: any) => {
-        return `${value}%`
+        return props.format ? props.format(value, 1) : `${value}%`
       },
     },
   },
-  series: [
-    {
-      data: props.data,
-      type: 'line',
-      showSymbol: false,
-    },
-  ],
+  series: Array.isArray(props.data) && props.data[0]?.name
+    ? props.data.map(item => ({
+        name: item.name,
+        data: item.data,
+        type: 'line',
+        showSymbol: false,
+        lineStyle: {
+          color: item.color
+        },
+        itemStyle: {
+          color: item.color
+        }
+      }))
+    : [{
+        data: props.data,
+        type: 'line',
+        showSymbol: false,
+      }]
 }
 
 function formatTime(time: number) {

@@ -84,7 +84,28 @@
         {{ server.cpu }}%
       </Progress>
     </div>
-    <StatusChart v-if="showCpuChart" :data="cpuHistory" />
+    <StatusChart 
+      v-if="showCpuChart" 
+      :data="[{ name: 'CPU', data: cpuHistory, color: '#10B981' }]" 
+    />
+    <div v-if="server.network_rx !== undefined" class="flex items-center gap-2">
+      网络
+      <Bandage class="flex items-center">
+        <IconDownload class="w-4 h-4" />{{ formatBytes(server.network_rx, 1) }}/s
+      </Bandage>
+      <Bandage class="flex items-center">
+        <IconUpload class="w-4 h-4" />{{ formatBytes(server.network_tx, 1) }}/s
+      </Bandage>
+    </div>
+    <StatusChart 
+      v-if="showCpuChart && server.network_rx !== undefined" 
+      :data="[
+        { name: '上传', data: networkUploadHistory, color: '#10B981' },
+        { name: '下载', data: networkDownloadHistory, color: '#3B82F6' }
+      ]"
+      :format="formatBytes"
+      class="network-chart"
+    />
     <div v-if="server.memory_total !== undefined" class="flex items-center gap-2">
       内存
       <Progress
@@ -180,6 +201,8 @@ const StatusChart = defineAsyncComponent(() => import('@/components/StatusChart.
 
 const CPU_HISTORY_KEEP_TIME = 300
 let cpuHistoryLastUpdated = 0
+const networkUploadHistory = ref<any[]>([])
+const networkDownloadHistory = ref<any[]>([])
 let networkHistoryLastUpdated = 0
 
 const cpuHistory = ref<any[]>([])
@@ -218,18 +241,31 @@ watch(() => props.server, () => {
     if (props.server.latest_ts <= networkHistoryLastUpdated)
       return
 
-    const list = networkHistory.value.slice()
-    list.push({
+    const uploadList = networkUploadHistory.value.slice()
+    const downloadList = networkDownloadHistory.value.slice()
+    
+    uploadList.push({
       name: Date.now(),
       value: [
         props.server.latest_ts * 1000,
-        props.server.network_rx + props.server.network_tx,
+        props.server.network_tx,
       ],
     })
-    while (list[0].name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
-      list.shift()
+    downloadList.push({
+      name: Date.now(),
+      value: [
+        props.server.latest_ts * 1000,
+        props.server.network_rx,
+      ],
+    })
 
-    networkHistory.value = list
+    while (uploadList[0].name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
+      uploadList.shift()
+    while (downloadList[0].name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
+      downloadList.shift()
+
+    networkUploadHistory.value = uploadList
+    networkDownloadHistory.value = downloadList
     networkHistoryLastUpdated = props.server.latest_ts
   }
 })
