@@ -85,6 +85,11 @@
       </Progress>
     </div>
     <StatusChart v-if="showCpuChart" :data="cpuHistory" />
+    <StatusChart 
+      v-if="showCpuChart && server.network_rx !== undefined" 
+      :data="networkHistory" 
+      class="network-chart"
+    />
     <div v-if="server.memory_total !== undefined" class="flex items-center gap-2">
       内存
       <Progress
@@ -317,12 +322,6 @@ watch(() => props.server, () => {
       </Progress>
     </div>
     <StatusChart v-if="showCpuChart" :data="cpuHistory" />
-    <!-- 在 CPU 图表后添加网络图表 -->
-    <StatusChart 
-      v-if="showCpuChart && server.network_rx !== undefined" 
-      :data="networkHistory" 
-      class="network-chart"
-    />
     <div v-if="server.memory_total !== undefined" class="flex items-center gap-2">
       内存
       <Progress
