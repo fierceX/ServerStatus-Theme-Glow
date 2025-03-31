@@ -173,7 +173,7 @@ function handleHistoryTimeRangeChange() {
   fetchData(true)
 }
 
-// 获取开始时间的函数
+// 获取开始时间的函数，修改为返回时间戳
 function getStartTimeParam() {
   const now = new Date()
   let startTime = new Date(now)
@@ -198,18 +198,11 @@ function getStartTimeParam() {
       return null
   }
   
-  // 修改格式化方式，确保日期格式正确
-  const year = startTime.getFullYear()
-  const month = String(startTime.getMonth() + 1).padStart(2, '0')
-  const day = String(startTime.getDate()).padStart(2, '0')
-  const hours = String(startTime.getHours()).padStart(2, '0')
-  const minutes = String(startTime.getMinutes()).padStart(2, '0')
-  const seconds = String(startTime.getSeconds()).padStart(2, '0')
-  
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+  // 返回时间戳（毫秒）
+  return Math.floor(startTime.getTime() / 1000)
 }
 
-// 修改获取数据的函数，添加时间参数
+// 修改获取数据的函数，使用时间戳参数
 function fetchData(forceRefresh = false) {
   if (fetching.value && !forceRefresh)
     return
@@ -224,12 +217,11 @@ function fetchData(forceRefresh = false) {
   
   // 如果不是默认的10分钟，则添加时间参数，但同时需要获取实时数据
   if (startTime && settings.value.historyTimeRange !== '10m') {
-    console.log(`获取历史数据，开始时间: ${startTime}`) // 添加日志便于调试
+    console.log(`获取历史数据，开始时间戳: ${startTime}`) // 添加日志便于调试
     // 获取历史数据
-    fetch(`${url}?start_time=${encodeURIComponent(startTime)}`)
+    fetch(`${url}?start_time=${startTime}`)
       .then(res => res.json())
       .then((historyData) => {
-        console.log('历史数据获取成功', historyData) // 添加日志便于调试
         // 同时获取实时数据
         return fetch(url)
           .then(res => res.json())
@@ -274,7 +266,7 @@ function fetchData(forceRefresh = false) {
   }
 }
 
-// 修改初始数据获取逻辑
+// 修改初始数据获取逻辑中的时间参数
 onMounted(() => {
   document.addEventListener('click', (e) => {
     if (showSettingPanel.value && !(e.target as HTMLElement).closest('.setting-panel'))
@@ -286,9 +278,10 @@ onMounted(() => {
   
   if (startTime && settings.value.historyTimeRange !== '10m') {
     loading.value = true
+    console.log(`初始化获取历史数据，开始时间戳: ${startTime}`) // 添加日志便于调试
     
-    // 获取历史数据
-    fetch(`${JSON_API}?start_time=${encodeURIComponent(startTime)}`)
+    // 获取历史数据，使用时间戳
+    fetch(`${JSON_API}?start_time=${startTime}`)
       .then(res => res.json())
       .then((historyData) => {
         // 同时获取实时数据
