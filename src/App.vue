@@ -49,19 +49,22 @@
           <SettingItem title="历史图表">
             <Switch v-model="settings.showCpuChart" />
           </SettingItem>
-          <SettingItem v-show="settings.showCpuChart" title="记录时间">
-            <select v-model="settings.cpuChartHistoryKeep">
-              <option value="60">
-                1分钟
-              </option>
-              <option value="180">
-                3分钟
-              </option>
-              <option value="300">
-                5分钟
-              </option>
-              <option value="600">
+          <SettingItem v-show="settings.showCpuChart" title="历史查看时间">
+            <select v-model="settings.historyTimeRange" @change="handleHistoryTimeRangeChange">
+              <option value="10m">
                 10分钟
+              </option>
+              <option value="1h">
+                1小时
+              </option>
+              <option value="8h">
+                8小时
+              </option>
+              <option value="12h">
+                12小时
+              </option>
+              <option value="24h">
+                24小时
               </option>
             </select>
           </SettingItem>
@@ -128,6 +131,7 @@ const settings = useLocalStorage('sstl-settings', {
   compactMode: false,
   showCpuChart: false,
   cpuChartHistoryKeep: 300,
+  historyTimeRange: '10m', // 添加新的设置项，默认10分钟
 }, {
   mergeDefaults: true,
 })
@@ -157,55 +161,173 @@ const serverCardCount = computed(() => {
   return Math.floor(WindowWidth.value / CARD_WIDTH) || 1
 })
 
-onMounted(() => {
-  document.addEventListener('click', (e) => {
-    if (showSettingPanel.value && !(e.target as HTMLElement).closest('.setting-panel'))
-      showSettingPanel.value = false
-  })
-  fetch(JSON_API)
-    .then(res => res.json())
-    .then((data) => {
-      // 直接使用新的API返回格式
-      serverData.value = data
-      timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
-      timer.value.addEventListener('message', () => {
-        fetchData()
-      })
-      timer.value.postMessage('start')
-    })
-    .catch(() => {
-      error.value = true
-    })
-    .finally(() => {
-      loading.value = false
-    })
-})
-
 onUnmounted(() => {
   if (timer.value)
     timer.value.postMessage('stop')
 })
 
-function fetchData() {
-  if (fetching.value)
-    return
-  if (Date.now() - latestUpdated.value < MIN_FETCH_INTERVAL)
-    return
-  fetching.value = true
-  fetch(JSON_API)
-    .then(res => res.json())
-    .then((data) => {
-      serverData.value = data
-      error.value = false
-    })
-    .catch(() => {
-      error.value = true
-    })
-    .finally(() => {
-      fetching.value = false
-      latestUpdated.value = Date.now()
-    })
+// 添加处理历史时间范围变化的函数
+function handleHistoryTimeRangeChange() {
+  // 当时间范围变化时，重新获取数据
+  fetchData(true)
 }
+
+// 获取开始时间的函数
+function getStartTimeParam() {
+  const now = new Date()
+  let startTime = new Date(now)
+  
+  switch (settings.value.historyTimeRange) {
+    case '10m':
+      // 默认10分钟，不需要添加参数
+      return null
+    case '1h':
+      startTime.setHours(now.getHours() - 1)
+      break
+    case '8h':
+      startTime.setHours(now.getHours() - 8)
+      break
+    case '12h':
+      startTime.setHours(now.getHours() - 12)
+      break
+    case '24h':
+      startTime.setDate(now.getDate() - 1)
+      break
+    default:
+      return null
+  }
+  
+  // 格式化为 YYYY-MM-DD HH:MM:SS
+  return startTime.toISOString().replace('T', ' ').substring(0, 19)
+}
+
+// 修改获取数据的函数，添加时间参数
+function fetchData(forceRefresh = false) {
+  if (fetching.value && !forceRefresh)
+    return
+  if (Date.now() - latestUpdated.value < MIN_FETCH_INTERVAL && !forceRefresh)
+    return
+  
+  fetching.value = true
+  
+  // 构建请求URL，添加时间参数
+  let url = JSON_API
+  const startTime = getStartTimeParam()
+  
+  // 如果不是默认的10分钟，则添加时间参数，但同时需要获取实时数据
+  if (startTime && settings.value.historyTimeRange !== '10m') {
+    // 获取历史数据
+    fetch(`${url}?start_time=${encodeURIComponent(startTime)}`)
+      .then(res => res.json())
+      .then((historyData) => {
+        // 同时获取实时数据
+        return fetch(url)
+          .then(res => res.json())
+          .then((realtimeData) => {
+            // 合并数据
+            if (historyData.servers && realtimeData.current) {
+              serverData.value = {
+                current: realtimeData.current,
+                servers: historyData.servers,
+                updated: realtimeData.updated || historyData.updated
+              }
+            } else {
+              serverData.value = realtimeData
+            }
+            error.value = false
+          })
+      })
+      .catch(() => {
+        error.value = true
+      })
+      .finally(() => {
+        fetching.value = false
+        latestUpdated.value = Date.now()
+      })
+  } else {
+    // 默认10分钟，直接获取完整数据
+    fetch(url)
+      .then(res => res.json())
+      .then((data) => {
+        serverData.value = data
+        error.value = false
+      })
+      .catch(() => {
+        error.value = true
+      })
+      .finally(() => {
+        fetching.value = false
+        latestUpdated.value = Date.now()
+      })
+  }
+}
+
+// 修改初始数据获取逻辑
+onMounted(() => {
+  document.addEventListener('click', (e) => {
+    if (showSettingPanel.value && !(e.target as HTMLElement).closest('.setting-panel'))
+      showSettingPanel.value = false
+  })
+  
+  // 初始获取数据
+  const startTime = getStartTimeParam()
+  
+  if (startTime && settings.value.historyTimeRange !== '10m') {
+    loading.value = true
+    
+    // 获取历史数据
+    fetch(`${JSON_API}?start_time=${encodeURIComponent(startTime)}`)
+      .then(res => res.json())
+      .then((historyData) => {
+        // 同时获取实时数据
+        return fetch(JSON_API)
+          .then(res => res.json())
+          .then((realtimeData) => {
+            // 合并数据
+            if (historyData.servers && realtimeData.current) {
+              serverData.value = {
+                current: realtimeData.current,
+                servers: historyData.servers,
+                updated: realtimeData.updated || historyData.updated
+              }
+            } else {
+              serverData.value = realtimeData
+            }
+            
+            // 设置定时器
+            timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
+            timer.value.addEventListener('message', () => {
+              fetchData()
+            })
+            timer.value.postMessage('start')
+          })
+      })
+      .catch(() => {
+        error.value = true
+      })
+      .finally(() => {
+        loading.value = false
+      })
+  } else {
+    // 默认10分钟，直接获取完整数据
+    fetch(JSON_API)
+      .then(res => res.json())
+      .then((data) => {
+        serverData.value = data
+        timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
+        timer.value.addEventListener('message', () => {
+          fetchData()
+        })
+        timer.value.postMessage('start')
+      })
+      .catch(() => {
+        error.value = true
+      })
+      .finally(() => {
+        loading.value = false
+      })
+  }
+})
 </script>
 
 <style>
