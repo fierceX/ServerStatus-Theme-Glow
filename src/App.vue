@@ -198,8 +198,15 @@ function getStartTimeParam() {
       return null
   }
   
-  // 格式化为 YYYY-MM-DD HH:MM:SS
-  return startTime.toISOString().replace('T', ' ').substring(0, 19)
+  // 修改格式化方式，确保日期格式正确
+  const year = startTime.getFullYear()
+  const month = String(startTime.getMonth() + 1).padStart(2, '0')
+  const day = String(startTime.getDate()).padStart(2, '0')
+  const hours = String(startTime.getHours()).padStart(2, '0')
+  const minutes = String(startTime.getMinutes()).padStart(2, '0')
+  const seconds = String(startTime.getSeconds()).padStart(2, '0')
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
 // 修改获取数据的函数，添加时间参数
@@ -217,21 +224,22 @@ function fetchData(forceRefresh = false) {
   
   // 如果不是默认的10分钟，则添加时间参数，但同时需要获取实时数据
   if (startTime && settings.value.historyTimeRange !== '10m') {
+    console.log(`获取历史数据，开始时间: ${startTime}`) // 添加日志便于调试
     // 获取历史数据
     fetch(`${url}?start_time=${encodeURIComponent(startTime)}`)
       .then(res => res.json())
       .then((historyData) => {
+        console.log('历史数据获取成功', historyData) // 添加日志便于调试
         // 同时获取实时数据
         return fetch(url)
           .then(res => res.json())
           .then((realtimeData) => {
+            console.log('实时数据获取成功', realtimeData) // 添加日志便于调试
             // 合并数据
             if (historyData.servers && realtimeData.current) {
               serverData.value = {
                 current: realtimeData.current,
-                servers: historyData.servers,
-                // 移除 updated 属性，或者使用 as any 类型断言
-                // updated: realtimeData.updated || historyData.updated
+                servers: historyData.servers
               }
             } else {
               serverData.value = realtimeData
@@ -239,7 +247,8 @@ function fetchData(forceRefresh = false) {
             error.value = false
           })
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('获取数据失败', err) // 添加错误日志
         error.value = true
       })
       .finally(() => {
@@ -254,7 +263,8 @@ function fetchData(forceRefresh = false) {
         serverData.value = data
         error.value = false
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('获取数据失败', err) // 添加错误日志
         error.value = true
       })
       .finally(() => {
