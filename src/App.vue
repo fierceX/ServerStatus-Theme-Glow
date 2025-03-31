@@ -217,7 +217,7 @@ function fetchData(forceRefresh = false) {
   
   // 如果不是默认的10分钟，则添加时间参数，但同时需要获取实时数据
   if (startTime && settings.value.historyTimeRange !== '10m') {
-    console.log(`获取历史数据，开始时间戳: ${startTime}`) // 添加日志便于调试
+    // console.log(`获取历史数据，开始时间戳: ${startTime}`) // 添加日志便于调试
     // 获取历史数据
     fetch(`${url}?start_time=${startTime}`)
       .then(res => res.json())
@@ -226,7 +226,7 @@ function fetchData(forceRefresh = false) {
         return fetch(url)
           .then(res => res.json())
           .then((realtimeData) => {
-            console.log('实时数据获取成功', realtimeData) // 添加日志便于调试
+            // console.log('实时数据获取成功', realtimeData) // 添加日志便于调试
             // 合并数据
             if (historyData.servers && realtimeData.current) {
               serverData.value = {
@@ -240,7 +240,7 @@ function fetchData(forceRefresh = false) {
           })
       })
       .catch((err) => {
-        console.error('获取数据失败', err) // 添加错误日志
+        // console.error('获取数据失败', err) // 添加错误日志
         error.value = true
       })
       .finally(() => {
@@ -260,7 +260,7 @@ function fetchData(forceRefresh = false) {
         error.value = false
       })
       .catch((err) => {
-        console.error('获取数据失败', err) // 添加错误日志
+        // console.error('获取数据失败', err) // 添加错误日志
         error.value = true
       })
       .finally(() => {
@@ -282,7 +282,7 @@ onMounted(() => {
   
   if (startTime && settings.value.historyTimeRange !== '10m') {
     loading.value = true
-    console.log(`初始化获取历史数据，开始时间戳: ${startTime}`) // 添加日志便于调试
+    // console.log(`初始化获取历史数据，开始时间戳: ${startTime}`) // 添加日志便于调试
     
     // 获取历史数据，使用时间戳
     fetch(`${JSON_API}?start_time=${startTime}`)
