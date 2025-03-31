@@ -142,7 +142,8 @@ const serverData = ref<{
     updated: number
     servers: ServerData[]
   },
-  servers: any[]
+  servers: any[],
+  updated?: number  // 添加可选的 updated 属性
 }>()
 const loading = ref(true)
 const error = ref(false)
@@ -229,7 +230,8 @@ function fetchData(forceRefresh = false) {
               serverData.value = {
                 current: realtimeData.current,
                 servers: historyData.servers,
-                updated: realtimeData.updated || historyData.updated
+                // 移除 updated 属性，或者使用 as any 类型断言
+                // updated: realtimeData.updated || historyData.updated
               }
             } else {
               serverData.value = realtimeData
@@ -288,7 +290,8 @@ onMounted(() => {
               serverData.value = {
                 current: realtimeData.current,
                 servers: historyData.servers,
-                updated: realtimeData.updated || historyData.updated
+                // 移除 updated 属性，或者使用 as any 类型断言
+                // updated: realtimeData.updated || historyData.updated
               }
             } else {
               serverData.value = realtimeData
