@@ -89,8 +89,9 @@
     >
       <template v-if="settings.layout === 'grid' || settings.layout === 'flex'">
         <ServerCard
-          v-for="server, index in serverData.servers" :key="index"
+          v-for="server, index in serverData.current.servers" :key="index"
           :server="server"
+          :server-history="findServerHistory(server.name)"
           :compact-mode="settings.compactMode"
           :show-cpu-chart="settings.showCpuChart"
           :class="{
@@ -101,7 +102,7 @@
       </template>
       <template v-if="settings.layout === 'list'">
         <ServerItem
-          v-for="server, index in serverData.servers" :key="index"
+          v-for="server, index in serverData.current.servers" :key="index"
           :server="server"
           :compact-mode="settings.compactMode"
           class="col-span-1"
@@ -131,9 +132,13 @@ const settings = useLocalStorage('sstl-settings', {
   mergeDefaults: true,
 })
 
+// 修改数据结构以适应新的API返回格式
 const serverData = ref<{
-  updated: number
-  servers: ServerData[]
+  current: {
+    updated: number
+    servers: ServerData[]
+  },
+  servers: any[]
 }>()
 const loading = ref(true)
 const error = ref(false)
@@ -141,6 +146,12 @@ const fetching = ref(false)
 const showSettingPanel = ref(false)
 const latestUpdated = ref(0)
 const timer = ref<Worker>()
+
+// 添加查找服务器历史数据的函数
+const findServerHistory = (serverName: string) => {
+  if (!serverData.value?.servers) return null
+  return serverData.value.servers.find(s => s.name === serverName)
+}
 
 const serverCardCount = computed(() => {
   return Math.floor(WindowWidth.value / CARD_WIDTH) || 1
@@ -154,6 +165,7 @@ onMounted(() => {
   fetch(JSON_API)
     .then(res => res.json())
     .then((data) => {
+      // 直接使用新的API返回格式
       serverData.value = data
       timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
       timer.value.addEventListener('message', () => {

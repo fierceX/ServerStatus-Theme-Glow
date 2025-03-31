@@ -96,8 +96,8 @@
     <StatusChart 
       v-if="showCpuChart" 
       :data="[
-        { name: 'CPU', data: cpuHistory, color: '#10B981' },
-        { name: '内存', data: memoryHistory, color: '#6366F1' }
+        { name: 'CPU', data: formattedCpuHistory, color: '#10B981' },
+        { name: '内存', data: formattedMemoryHistory, color: '#6366F1' }
       ]" 
     />
     <template v-if="server.disks?.length">
@@ -135,8 +135,8 @@
     <StatusChart 
       v-if="showCpuChart && server.network_rx !== undefined" 
       :data="[
-        { name: '上传', data: networkUploadHistory, color: '#10B981' },
-        { name: '下载', data: networkDownloadHistory, color: '#3B82F6' }
+        { name: '上传', data: formattedNetworkUploadHistory, color: '#10B981' },
+        { name: '下载', data: formattedNetworkDownloadHistory, color: '#3B82F6' }
       ]"
       :format="formatBytes"
       class="network-chart"
@@ -184,104 +184,57 @@ const props = defineProps<{
   server: ServerData
   compactMode: boolean
   showCpuChart: boolean
+  serverHistory?: any // 添加新的属性接收历史数据
 }>()
 
 const StatusChart = defineAsyncComponent(() => import('@/components/StatusChart.vue'))
 
-const CPU_HISTORY_KEEP_TIME = 300
-let cpuHistoryLastUpdated = 0
-const networkUploadHistory = ref<any[]>([])
-const networkDownloadHistory = ref<any[]>([])
-let networkHistoryLastUpdated = 0
-
-const cpuHistory = ref<any[]>([])
-// 添加内存历史变量
-const memoryHistory = ref<any[]>([])
-let memoryHistoryLastUpdated = 0
 
 const labels = computed(() => parseLabels(props.server.labels))
 const noLoadData = computed(() => hasLoadData(props.server))
+
+// 添加新的计算属性来处理历史数据
+const formattedCpuHistory = computed(() => {
+  if (!props.serverHistory?.cpu_history) return []
+  
+  return props.serverHistory.cpu_history.map((item: any) => ({
+    name: item.timestamp,
+    value: [item.timestamp * 1000, item.value]
+  }))
+})
+
+const formattedMemoryHistory = computed(() => {
+  if (!props.serverHistory?.memory_history) return []
+  
+  return props.serverHistory.memory_history.map((item: any) => ({
+    name: item.timestamp,
+    value: [item.timestamp * 1000, item.value]
+  }))
+})
+
+const formattedNetworkUploadHistory = computed(() => {
+  if (!props.serverHistory?.network_out_history) return []
+  
+  return props.serverHistory.network_out_history.map((item: any) => ({
+    name: item.timestamp,
+    value: [item.timestamp * 1000, item.value]
+  }))
+})
+
+const formattedNetworkDownloadHistory = computed(() => {
+  if (!props.serverHistory?.network_in_history) return []
+  
+  return props.serverHistory.network_in_history.map((item: any) => ({
+    name: item.timestamp,
+    value: [item.timestamp * 1000, item.value]
+  }))
+})
 
 function getDiskUsagePercent(disk: DiskInfo) {
   return Math.round((disk.used / disk.total) * 100)
 }
 
-watch(() => props.server, () => {
-  // CPU 历史记录更新逻辑
-  if (props.server.latest_ts && props.server.cpu) {
-    if (props.server.latest_ts <= cpuHistoryLastUpdated)
-      return
-
-    const list = cpuHistory.value.slice()
-    list.push({
-      name: Date.now(),
-      value: [
-        props.server.latest_ts * 1000,
-        props.server.cpu,
-      ],
-    })
-    while (list[0].name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
-      list.shift()
-
-    cpuHistory.value = list
-    cpuHistoryLastUpdated = props.server.latest_ts
-  }
-
-  // 添加内存历史记录更新逻辑
-  if (props.server.latest_ts && props.server.memory_total !== undefined && props.server.memory_used !== undefined) {
-    if (props.server.latest_ts <= memoryHistoryLastUpdated)
-      return
-
-    const memoryUsage = (props.server.memory_used / props.server.memory_total) * 100
-    const list = memoryHistory.value.slice()
-    
-    list.push({
-      name: Date.now(),
-      value: [
-        props.server.latest_ts * 1000,
-        Math.round(memoryUsage * 100) / 100,
-      ],
-    })
-    while (list[0]?.name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
-      list.shift()
-
-    memoryHistory.value = list
-    memoryHistoryLastUpdated = props.server.latest_ts
-  }
-
-  // 添加网络历史记录更新逻辑
-  if (props.server.latest_ts && props.server.network_rx !== undefined && props.server.network_tx !== undefined) {
-    if (props.server.latest_ts <= networkHistoryLastUpdated)
-      return
-
-    const uploadList = networkUploadHistory.value.slice()
-    const downloadList = networkDownloadHistory.value.slice()
-    
-    uploadList.push({
-      name: Date.now(),
-      value: [
-        props.server.latest_ts * 1000,
-        props.server.network_tx,
-      ],
-    })
-    downloadList.push({
-      name: Date.now(),
-      value: [
-        props.server.latest_ts * 1000,
-        props.server.network_rx,
-      ],
-    })
-
-    while (uploadList[0].name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
-      uploadList.shift()
-    while (downloadList[0].name < Date.now() - CPU_HISTORY_KEEP_TIME * 1000)
-      downloadList.shift()
-
-    networkUploadHistory.value = uploadList
-    networkDownloadHistory.value = downloadList
-    networkHistoryLastUpdated = props.server.latest_ts
-  }
-})
+// 移除不再需要的 watch 函数
 </script>
 
 <style scoped>
