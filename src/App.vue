@@ -198,7 +198,7 @@ function getStartTimeParam() {
       return null
   }
   
-  // 返回时间戳（毫秒）
+  // 返回时间戳（秒）
   return Math.floor(startTime.getTime() / 1000)
 }
 
@@ -252,7 +252,11 @@ function fetchData(forceRefresh = false) {
     fetch(url)
       .then(res => res.json())
       .then((data) => {
-        serverData.value = data
+        // 避免不必要的重新渲染
+        if (forceRefresh || !serverData.value || 
+            JSON.stringify(serverData.value) !== JSON.stringify(data)) {
+          serverData.value = data
+        }
         error.value = false
       })
       .catch((err) => {
@@ -303,7 +307,10 @@ onMounted(() => {
             // 设置定时器
             timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
             timer.value.addEventListener('message', () => {
-              fetchData()
+              // 添加防抖，避免频繁刷新
+              if (!fetching.value && Date.now() - latestUpdated.value >= MIN_FETCH_INTERVAL) {
+                fetchData()
+              }
             })
             timer.value.postMessage('start')
           })
