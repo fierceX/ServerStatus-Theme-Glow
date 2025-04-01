@@ -123,6 +123,7 @@ import type { ServerData } from './types'
 const JSON_API = '/json/stats.json'
 const CARD_WIDTH = 350
 const MIN_FETCH_INTERVAL = 500
+const HISTORY_FETCH_INTERVAL = 30 * 60 * 1000 // 添加历史数据的请求间隔：30分钟
 
 const { width: WindowWidth } = useWindowSize()
 
@@ -150,6 +151,7 @@ const error = ref(false)
 const fetching = ref(false)
 const showSettingPanel = ref(false)
 const latestUpdated = ref(0)
+const historyLatestUpdated = ref(0) // 添加历史数据的最后更新时间
 const timer = ref<Worker>()
 
 // 添加查找服务器历史数据的函数
@@ -206,41 +208,84 @@ function getStartTimeParam() {
 function fetchData(forceRefresh = false) {
   if (fetching.value && !forceRefresh)
     return
-  if (Date.now() - latestUpdated.value < MIN_FETCH_INTERVAL && !forceRefresh)
+  
+  const isHistoryMode = settings.value.historyTimeRange !== '10m'
+  const startTime = getStartTimeParam()
+  
+  // 检查是否需要获取历史数据
+  const needFetchHistory = isHistoryMode && 
+    (forceRefresh || Date.now() - historyLatestUpdated.value >= HISTORY_FETCH_INTERVAL)
+  
+  // 检查是否需要获取实时数据
+  const needFetchRealtime = forceRefresh || Date.now() - latestUpdated.value >= MIN_FETCH_INTERVAL
+  
+  if (!needFetchHistory && !needFetchRealtime)
     return
   
   fetching.value = true
   
-  // 构建请求URL，添加时间参数
+  // 构建请求URL
   let url = JSON_API
-  const startTime = getStartTimeParam()
   
-  // 如果不是默认的10分钟，则添加时间参数，但同时需要获取实时数据
-  if (startTime && settings.value.historyTimeRange !== '10m') {
-    // console.log(`获取历史数据，开始时间戳: ${startTime}`) // 添加日志便于调试
-    // 获取历史数据
+  // 如果是历史模式且需要获取历史数据
+  if (isHistoryMode && needFetchHistory) {
+    // 获取历史数据（用于图表）
     fetch(`${url}?start_time=${startTime}`)
       .then(res => res.json())
       .then((historyData) => {
-        // 同时获取实时数据
-        return fetch(url)
-          .then(res => res.json())
-          .then((realtimeData) => {
-            // console.log('实时数据获取成功', realtimeData) // 添加日志便于调试
-            // 合并数据
-            if (historyData.servers && realtimeData.current) {
-              serverData.value = {
-                current: realtimeData.current,
-                servers: historyData.servers
+        // 如果需要获取实时数据
+        if (needFetchRealtime) {
+          return fetch(url)
+            .then(res => res.json())
+            .then((realtimeData) => {
+              // 更新数据
+              if (historyData.servers && realtimeData.current) {
+                serverData.value = {
+                  current: realtimeData.current,
+                  servers: historyData.servers
+                }
+              } else {
+                serverData.value = realtimeData
               }
-            } else {
-              serverData.value = realtimeData
-            }
-            error.value = false
-          })
+              error.value = false
+              latestUpdated.value = Date.now()
+            })
+        } else {
+          // 只更新历史数据部分
+          if (serverData.value && historyData.servers) {
+            serverData.value.servers = historyData.servers
+          } else {
+            serverData.value = historyData
+          }
+          error.value = false
+        }
+        historyLatestUpdated.value = Date.now()
       })
       .catch((err) => {
-        // console.error('获取数据失败', err) // 添加错误日志
+        error.value = true
+      })
+      .finally(() => {
+        fetching.value = false
+      })
+  } 
+  // 如果只需要获取实时数据
+  else if (needFetchRealtime) {
+    fetch(url)
+      .then(res => res.json())
+      .then((data) => {
+        if (isHistoryMode && serverData.value?.servers) {
+          // 在历史模式下，只更新实时数据部分
+          serverData.value.current = data.current
+        } else {
+          // 避免不必要的重新渲染
+          if (forceRefresh || !serverData.value || 
+              JSON.stringify(serverData.value) !== JSON.stringify(data)) {
+            serverData.value = data
+          }
+        }
+        error.value = false
+      })
+      .catch((err) => {
         error.value = true
       })
       .finally(() => {
@@ -248,29 +293,11 @@ function fetchData(forceRefresh = false) {
         latestUpdated.value = Date.now()
       })
   } else {
-    // 默认10分钟，直接获取完整数据
-    fetch(url)
-      .then(res => res.json())
-      .then((data) => {
-        // 避免不必要的重新渲染
-        if (forceRefresh || !serverData.value || 
-            JSON.stringify(serverData.value) !== JSON.stringify(data)) {
-          serverData.value = data
-        }
-        error.value = false
-      })
-      .catch((err) => {
-        // console.error('获取数据失败', err) // 添加错误日志
-        error.value = true
-      })
-      .finally(() => {
-        fetching.value = false
-        latestUpdated.value = Date.now()
-      })
+    fetching.value = false
   }
 }
 
-// 修改初始数据获取逻辑中的时间参数
+// 修改初始数据获取逻辑
 onMounted(() => {
   document.addEventListener('click', (e) => {
     if (showSettingPanel.value && !(e.target as HTMLElement).closest('.setting-panel'))
@@ -279,11 +306,11 @@ onMounted(() => {
   
   // 初始获取数据
   const startTime = getStartTimeParam()
+  const isHistoryMode = settings.value.historyTimeRange !== '10m'
   
-  if (startTime && settings.value.historyTimeRange !== '10m') {
-    loading.value = true
-    // console.log(`初始化获取历史数据，开始时间戳: ${startTime}`) // 添加日志便于调试
-    
+  loading.value = true
+  
+  if (isHistoryMode && startTime) {
     // 获取历史数据，使用时间戳
     fetch(`${JSON_API}?start_time=${startTime}`)
       .then(res => res.json())
@@ -297,22 +324,17 @@ onMounted(() => {
               serverData.value = {
                 current: realtimeData.current,
                 servers: historyData.servers,
-                // 移除 updated 属性，或者使用 as any 类型断言
-                // updated: realtimeData.updated || historyData.updated
               }
             } else {
               serverData.value = realtimeData
             }
             
+            // 设置初始更新时间
+            latestUpdated.value = Date.now()
+            historyLatestUpdated.value = Date.now()
+            
             // 设置定时器
-            timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
-            timer.value.addEventListener('message', () => {
-              // 添加防抖，避免频繁刷新
-              if (!fetching.value && Date.now() - latestUpdated.value >= MIN_FETCH_INTERVAL) {
-                fetchData()
-              }
-            })
-            timer.value.postMessage('start')
+            setupTimer()
           })
       })
       .catch(() => {
@@ -327,11 +349,10 @@ onMounted(() => {
       .then(res => res.json())
       .then((data) => {
         serverData.value = data
-        timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
-        timer.value.addEventListener('message', () => {
-          fetchData()
-        })
-        timer.value.postMessage('start')
+        latestUpdated.value = Date.now()
+        
+        // 设置定时器
+        setupTimer()
       })
       .catch(() => {
         error.value = true
@@ -341,6 +362,15 @@ onMounted(() => {
       })
   }
 })
+
+// 添加设置定时器的函数
+function setupTimer() {
+  timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
+  timer.value.addEventListener('message', () => {
+    fetchData()
+  })
+  timer.value.postMessage('start')
+}
 </script>
 
 <style>
