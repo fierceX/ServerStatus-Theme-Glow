@@ -121,9 +121,10 @@ import { useLocalStorage, useWindowSize } from '@vueuse/core'
 import type { ServerData } from './types'
 
 const JSON_API = '/json/stats.json'
+const HISTORY_API = '/json/history.json' // 新增历史数据API
 const CARD_WIDTH = 350
 const MIN_FETCH_INTERVAL = 500
-// 移除 HISTORY_FETCH_INTERVAL 常量，因为我们不再使用定时间隔获取历史数据
+const REALTIME_HISTORY_INTERVAL = 1000 // 实时模式下历史数据刷新间隔（1秒）
 
 const { width: WindowWidth } = useWindowSize()
 
@@ -212,8 +213,12 @@ function fetchData(forceRefresh = false) {
   const isHistoryMode = settings.value.historyTimeRange !== '10m'
   const startTime = getStartTimeParam()
   
-  // 检查是否需要获取历史数据 - 只在强制刷新时获取
-  const needFetchHistory = isHistoryMode && forceRefresh
+  // 检查是否需要获取历史数据
+  // 1. 历史模式：只在强制刷新时获取
+  // 2. 实时模式(10分钟)：在强制刷新或达到刷新间隔时获取
+  const needFetchHistory = (isHistoryMode && forceRefresh) || 
+                          (!isHistoryMode && (forceRefresh || 
+                           Date.now() - historyLatestUpdated.value >= REALTIME_HISTORY_INTERVAL))
   
   // 检查是否需要获取实时数据
   const needFetchRealtime = forceRefresh || Date.now() - latestUpdated.value >= MIN_FETCH_INTERVAL
@@ -223,28 +228,41 @@ function fetchData(forceRefresh = false) {
   
   fetching.value = true
   
-  // 构建请求URL
-  let url = JSON_API
-  
-  // 如果是历史模式且需要获取历史数据（只在强制刷新时）
-  if (isHistoryMode && needFetchHistory) {
+  // 需要获取历史数据的情况
+  if (needFetchHistory) {
+    // 构建历史API请求URL - 实时模式不添加时间参数
+    const historyUrl = `${HISTORY_API}${!isHistoryMode ? '' : `?start_time=${startTime}`}`
+    
     // 获取历史数据（用于图表）
-    fetch(`${url}?start_time=${startTime}`)
+    fetch(historyUrl)
       .then(res => res.json())
       .then((historyData) => {
+        // 更新历史数据最后更新时间
+        historyLatestUpdated.value = Date.now()
+        
         // 如果需要获取实时数据
         if (needFetchRealtime) {
-          return fetch(url)
+          return fetch(JSON_API)
             .then(res => res.json())
             .then((realtimeData) => {
-              // 更新数据
-              if (historyData.servers && realtimeData.current) {
+              // 更新数据 - 适配新的API格式
+              if (historyData.servers) {
                 serverData.value = {
-                  current: realtimeData.current,
+                  current: {
+                    updated: Date.now() / 1000,
+                    servers: realtimeData.servers || []
+                  },
                   servers: historyData.servers
                 }
               } else {
-                serverData.value = realtimeData
+                // 如果历史数据格式不对，使用实时数据
+                serverData.value = {
+                  current: {
+                    updated: Date.now() / 1000,
+                    servers: realtimeData.servers || []
+                  },
+                  servers: []
+                }
               }
               error.value = false
               latestUpdated.value = Date.now()
@@ -254,7 +272,14 @@ function fetchData(forceRefresh = false) {
           if (serverData.value && historyData.servers) {
             serverData.value.servers = historyData.servers
           } else {
-            serverData.value = historyData
+            // 如果没有现有数据，创建一个新的数据结构
+            serverData.value = {
+              current: serverData.value?.current || {
+                updated: Date.now() / 1000,
+                servers: []
+              },
+              servers: historyData.servers || []
+            }
           }
           error.value = false
         }
@@ -268,17 +293,29 @@ function fetchData(forceRefresh = false) {
   } 
   // 如果只需要获取实时数据
   else if (needFetchRealtime) {
-    fetch(url)
+    fetch(JSON_API)
       .then(res => res.json())
       .then((data) => {
         if (isHistoryMode && serverData.value?.servers) {
           // 在历史模式下，只更新实时数据部分
-          serverData.value.current = data.current
+          serverData.value.current = {
+            updated: Date.now() / 1000,
+            servers: data.servers || []
+          }
         } else {
+          // 适配新的API格式
+          const newData = {
+            current: {
+              updated: Date.now() / 1000,
+              servers: data.servers || []
+            },
+            servers: serverData.value?.servers || []
+          }
+          
           // 避免不必要的重新渲染
           if (forceRefresh || !serverData.value || 
-              JSON.stringify(serverData.value) !== JSON.stringify(data)) {
-            serverData.value = data
+              JSON.stringify(serverData.value) !== JSON.stringify(newData)) {
+            serverData.value = newData
           }
         }
         error.value = false
@@ -308,57 +345,40 @@ onMounted(() => {
   
   loading.value = true
   
-  if (isHistoryMode && startTime) {
-    // 获取历史数据，使用时间戳
-    fetch(`${JSON_API}?start_time=${startTime}`)
-      .then(res => res.json())
-      .then((historyData) => {
-        // 同时获取实时数据
-        return fetch(JSON_API)
-          .then(res => res.json())
-          .then((realtimeData) => {
-            // 合并数据
-            if (historyData.servers && realtimeData.current) {
-              serverData.value = {
-                current: realtimeData.current,
-                servers: historyData.servers,
-              }
-            } else {
-              serverData.value = realtimeData
-            }
-            
-            // 设置初始更新时间
-            latestUpdated.value = Date.now()
-            historyLatestUpdated.value = Date.now()
-            
-            // 设置定时器
-            setupTimer()
-          })
-      })
-      .catch(() => {
-        error.value = true
-      })
-      .finally(() => {
-        loading.value = false
-      })
-  } else {
-    // 默认10分钟，直接获取完整数据
-    fetch(JSON_API)
-      .then(res => res.json())
-      .then((data) => {
-        serverData.value = data
-        latestUpdated.value = Date.now()
-        
-        // 设置定时器
-        setupTimer()
-      })
-      .catch(() => {
-        error.value = true
-      })
-      .finally(() => {
-        loading.value = false
-      })
-  }
+  // 构建历史API请求URL - 对于10分钟模式不添加参数
+  const historyUrl = `${HISTORY_API}${!isHistoryMode ? '' : `?start_time=${startTime}`}`
+  
+  // 无论是否为历史模式，都获取历史数据用于图表
+  fetch(historyUrl)
+    .then(res => res.json())
+    .then((historyData) => {
+      // 同时获取实时数据
+      return fetch(JSON_API)
+        .then(res => res.json())
+        .then((realtimeData) => {
+          // 合并数据 - 适配新的API格式
+          serverData.value = {
+            current: {
+              updated: Date.now() / 1000,
+              servers: realtimeData.servers || []
+            },
+            servers: historyData.servers || []
+          }
+          
+          // 设置初始更新时间
+          latestUpdated.value = Date.now()
+          historyLatestUpdated.value = Date.now()
+          
+          // 设置定时器
+          setupTimer()
+        })
+    })
+    .catch(() => {
+      error.value = true
+    })
+    .finally(() => {
+      loading.value = false
+    })
 })
 
 // 添加设置定时器的函数
