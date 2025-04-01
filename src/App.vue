@@ -125,6 +125,7 @@ const HISTORY_API = '/json/history.json' // 新增历史数据API
 const CARD_WIDTH = 350
 const MIN_FETCH_INTERVAL = 500
 const REALTIME_HISTORY_INTERVAL = 1000 // 实时模式下历史数据刷新间隔（1秒）
+const HISTORY_FETCH_TIMEOUT = 20000 // 历史数据请求超时时间（20秒）
 
 const { width: WindowWidth } = useWindowSize()
 
@@ -205,6 +206,16 @@ function getStartTimeParam() {
   return Math.floor(startTime.getTime() / 1000)
 }
 
+// 添加一个用于处理超时的函数
+function fetchWithTimeout(url: string, options = {}, timeout = HISTORY_FETCH_TIMEOUT) {
+  return Promise.race([
+    fetch(url, options),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('请求超时')), timeout)
+    )
+  ]) as Promise<Response>;
+}
+
 // 修改获取数据的函数，使用时间戳参数
 function fetchData(forceRefresh = false) {
   if (fetching.value && !forceRefresh)
@@ -228,107 +239,67 @@ function fetchData(forceRefresh = false) {
   
   fetching.value = true
   
-  // 需要获取历史数据的情况
-  if (needFetchHistory) {
-    // 构建历史API请求URL - 实时模式不添加时间参数
-    const historyUrl = `${HISTORY_API}${!isHistoryMode ? '' : `?start_time=${startTime}`}`
-    
-    // 获取历史数据（用于图表）
-    fetch(historyUrl)
-      .then(res => res.json())
-      .then((historyData) => {
-        // 更新历史数据最后更新时间
-        historyLatestUpdated.value = Date.now()
-        
-        // 如果需要获取实时数据
-        if (needFetchRealtime) {
-          return fetch(JSON_API)
-            .then(res => res.json())
-            .then((realtimeData) => {
-              // 更新数据 - 适配新的API格式
-              if (historyData.servers) {
-                serverData.value = {
-                  current: {
-                    updated: Date.now() / 1000,
-                    servers: realtimeData.servers || []
-                  },
-                  servers: historyData.servers
-                }
-              } else {
-                // 如果历史数据格式不对，使用实时数据
-                serverData.value = {
-                  current: {
-                    updated: Date.now() / 1000,
-                    servers: realtimeData.servers || []
-                  },
-                  servers: []
-                }
-              }
-              error.value = false
-              latestUpdated.value = Date.now()
-            })
-        } else {
-          // 只更新历史数据部分
-          if (serverData.value && historyData.servers) {
-            serverData.value.servers = historyData.servers
-          } else {
-            // 如果没有现有数据，创建一个新的数据结构
-            serverData.value = {
-              current: serverData.value?.current || {
-                updated: Date.now() / 1000,
-                servers: []
-              },
-              servers: historyData.servers || []
-            }
-          }
-          error.value = false
-        }
-      })
-      .catch((err) => {
-        error.value = true
-      })
-      .finally(() => {
-        fetching.value = false
-      })
-  } 
-  // 如果只需要获取实时数据
-  else if (needFetchRealtime) {
+  // 首先获取实时数据，确保界面响应
+  if (needFetchRealtime) {
     fetch(JSON_API)
       .then(res => res.json())
       .then((data) => {
-        if (isHistoryMode && serverData.value?.servers) {
-          // 在历史模式下，只更新实时数据部分
+        if (serverData.value) {
+          // 更新实时数据部分
           serverData.value.current = {
             updated: Date.now() / 1000,
             servers: data.servers || []
           }
         } else {
-          // 适配新的API格式
-          const newData = {
+          // 初始化数据结构
+          serverData.value = {
             current: {
               updated: Date.now() / 1000,
               servers: data.servers || []
             },
-            servers: serverData.value?.servers || []
-          }
-          
-          // 避免不必要的重新渲染
-          if (forceRefresh || !serverData.value || 
-              JSON.stringify(serverData.value) !== JSON.stringify(newData)) {
-            serverData.value = newData
+            servers: []
           }
         }
         error.value = false
+        latestUpdated.value = Date.now()
       })
       .catch((err) => {
+        console.error('获取实时数据失败:', err)
         error.value = true
       })
       .finally(() => {
-        fetching.value = false
-        latestUpdated.value = Date.now()
+        // 只有在不需要获取历史数据时才结束fetching状态
+        if (!needFetchHistory) {
+          fetching.value = false
+        }
       })
-  } else {
-    fetching.value = false
+  }
+  
+  // 异步获取历史数据，不阻塞UI
+  if (needFetchHistory) {
+    // 构建历史API请求URL
+    const historyUrl = `${HISTORY_API}${!isHistoryMode ? '' : `?start_time=${startTime}`}`
+    
+    // 使用带超时的fetch获取历史数据
+    fetchWithTimeout(historyUrl)
+      .then(res => res.json())
+      .then((historyData) => {
+        if (serverData.value && historyData.servers) {
+          // 只更新历史数据部分，不影响实时数据显示
+          serverData.value.servers = historyData.servers
+        }
+        historyLatestUpdated.value = Date.now()
+      })
+      .catch((err) => {
+        console.error('获取历史数据失败:', err)
+        // 历史数据获取失败不影响整体状态，只记录日志
+      })
+      .finally(() => {
+        // 如果只需要获取历史数据，或者实时数据已经获取完成，则结束fetching状态
+        if (!needFetchRealtime || Date.now() - latestUpdated.value < MIN_FETCH_INTERVAL) {
+          fetching.value = false
+        }
+      })
   }
 }
 
@@ -339,38 +310,44 @@ onMounted(() => {
       showSettingPanel.value = false
   })
   
-  // 初始获取数据
-  const startTime = getStartTimeParam()
-  const isHistoryMode = settings.value.historyTimeRange !== '10m'
-  
   loading.value = true
   
-  // 构建历史API请求URL - 对于10分钟模式不添加参数
-  const historyUrl = `${HISTORY_API}${!isHistoryMode ? '' : `?start_time=${startTime}`}`
-  
-  // 无论是否为历史模式，都获取历史数据用于图表
-  fetch(historyUrl)
+  // 首先获取实时数据，确保界面快速响应
+  fetch(JSON_API)
     .then(res => res.json())
-    .then((historyData) => {
-      // 同时获取实时数据
-      return fetch(JSON_API)
+    .then((realtimeData) => {
+      // 初始化数据结构
+      serverData.value = {
+        current: {
+          updated: Date.now() / 1000,
+          servers: realtimeData.servers || []
+        },
+        servers: []
+      }
+      
+      latestUpdated.value = Date.now()
+      error.value = false
+      
+      // 设置定时器
+      setupTimer()
+      
+      // 异步获取历史数据
+      const startTime = getStartTimeParam()
+      const isHistoryMode = settings.value.historyTimeRange !== '10m'
+      const historyUrl = `${HISTORY_API}${!isHistoryMode ? '' : `?start_time=${startTime}`}`
+      
+      // 使用带超时的fetch获取历史数据
+      fetchWithTimeout(historyUrl)
         .then(res => res.json())
-        .then((realtimeData) => {
-          // 合并数据 - 适配新的API格式
-          serverData.value = {
-            current: {
-              updated: Date.now() / 1000,
-              servers: realtimeData.servers || []
-            },
-            servers: historyData.servers || []
+        .then((historyData) => {
+          if (serverData.value && historyData.servers) {
+            serverData.value.servers = historyData.servers
           }
-          
-          // 设置初始更新时间
-          latestUpdated.value = Date.now()
           historyLatestUpdated.value = Date.now()
-          
-          // 设置定时器
-          setupTimer()
+        })
+        .catch((err) => {
+          console.error('获取历史数据失败:', err)
+          // 历史数据获取失败不影响整体状态
         })
     })
     .catch(() => {
