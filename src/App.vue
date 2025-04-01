@@ -123,7 +123,7 @@ import type { ServerData } from './types'
 const JSON_API = '/json/stats.json'
 const CARD_WIDTH = 350
 const MIN_FETCH_INTERVAL = 500
-const HISTORY_FETCH_INTERVAL = 30 * 60 * 1000 // 添加历史数据的请求间隔：30分钟
+// 移除 HISTORY_FETCH_INTERVAL 常量，因为我们不再使用定时间隔获取历史数据
 
 const { width: WindowWidth } = useWindowSize()
 
@@ -212,9 +212,8 @@ function fetchData(forceRefresh = false) {
   const isHistoryMode = settings.value.historyTimeRange !== '10m'
   const startTime = getStartTimeParam()
   
-  // 检查是否需要获取历史数据
-  const needFetchHistory = isHistoryMode && 
-    (forceRefresh || Date.now() - historyLatestUpdated.value >= HISTORY_FETCH_INTERVAL)
+  // 检查是否需要获取历史数据 - 只在强制刷新时获取
+  const needFetchHistory = isHistoryMode && forceRefresh
   
   // 检查是否需要获取实时数据
   const needFetchRealtime = forceRefresh || Date.now() - latestUpdated.value >= MIN_FETCH_INTERVAL
@@ -227,7 +226,7 @@ function fetchData(forceRefresh = false) {
   // 构建请求URL
   let url = JSON_API
   
-  // 如果是历史模式且需要获取历史数据
+  // 如果是历史模式且需要获取历史数据（只在强制刷新时）
   if (isHistoryMode && needFetchHistory) {
     // 获取历史数据（用于图表）
     fetch(`${url}?start_time=${startTime}`)
@@ -259,7 +258,6 @@ function fetchData(forceRefresh = false) {
           }
           error.value = false
         }
-        historyLatestUpdated.value = Date.now()
       })
       .catch((err) => {
         error.value = true
