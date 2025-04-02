@@ -46,25 +46,25 @@
           <SettingItem title="精简显示">
             <Switch v-model="settings.compactMode" />
           </SettingItem>
-          <SettingItem title="历史图表">
+          <SettingItem title="趋势图">
             <Switch v-model="settings.showCpuChart" />
           </SettingItem>
-          <SettingItem v-show="settings.showCpuChart" title="历史查看时间">
+          <SettingItem v-show="settings.showCpuChart" title="查看时间">
             <select v-model="settings.historyTimeRange" @change="handleHistoryTimeRangeChange">
               <option value="10m">
-                10分钟
+                实时（10分钟）
               </option>
               <option value="1h">
-                1小时
+                近1小时
               </option>
               <option value="8h">
-                8小时
+                近8小时
               </option>
               <option value="12h">
-                12小时
+                近12小时
               </option>
               <option value="24h">
-                24小时
+                近24小时
               </option>
             </select>
           </SettingItem>
