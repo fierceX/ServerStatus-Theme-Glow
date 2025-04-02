@@ -342,32 +342,174 @@ function fetchData(forceRefresh = false) {
   }
 }
 
-// 修改设置定时器的函数，增加错误处理
+// 修改设置定时器的函数，使用更可靠的方式
 function setupTimer() {
   try {
     if (timer.value) {
-      timer.value.terminate() // 确保旧的worker被正确终止
+      try {
+        timer.value.terminate() // 确保旧的worker被正确终止
+      } catch (e) {
+        console.error('终止旧Worker失败:', e)
+      }
     }
     
-    timer.value = new Worker(new URL('./worker/timer.js', import.meta.url))
+    // 使用更简单的setInterval作为备选方案
+    const intervalId = setInterval(() => fetchData(), 1000)
     
-    timer.value.addEventListener('message', () => {
-      fetchData()
+    // 保存intervalId以便在组件卸载时清除
+    onUnmounted(() => {
+      clearInterval(intervalId)
     })
     
-    timer.value.addEventListener('error', (e) => {
-      console.error('Worker错误:', e)
-      // 尝试重新创建worker
-      setTimeout(setupTimer, 1000)
-    })
-    
-    timer.value.postMessage('start')
-    console.log('定时器已启动')
+    console.log('定时器已启动(使用setInterval)')
   } catch (err) {
-    console.error('创建Worker失败:', err)
-    // 使用fallback方案
-    setInterval(() => fetchData(), 1000)
+    console.error('创建定时器失败:', err)
   }
+}
+
+// 修改onMounted函数，确保初始化正确执行
+onMounted(() => {
+  document.addEventListener('click', (e) => {
+    if (showSettingPanel.value && !(e.target as HTMLElement).closest('.setting-panel'))
+      showSettingPanel.value = false
+  })
+  
+  loading.value = true
+  
+  // 首先获取实时数据，确保界面快速响应
+  fetch(JSON_API)
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`HTTP错误: ${res.status}`)
+      }
+      return res.json()
+    })
+    .then((realtimeData) => {
+      // 初始化数据结构
+      serverData.value = {
+        current: {
+          updated: Date.now() / 1000,
+          servers: realtimeData.servers || []
+        },
+        servers: []
+      }
+      
+      latestUpdated.value = Date.now()
+      error.value = false
+      
+      // 设置定时器
+      setupTimer()
+      
+      // 如果需要图表数据，异步获取历史数据
+      if (settings.value.showCpuChart) {
+        const startTime = getStartTimeParam()
+        const isHistoryMode = settings.value.historyTimeRange !== '10m'
+        const historyUrl = `${HISTORY_API}${!isHistoryMode ? '' : `?start_time=${startTime}`}`
+        
+        // 使用带超时的fetch获取历史数据
+        fetchWithTimeout(historyUrl)
+          .then(res => {
+            if (!res.ok) {
+              throw new Error(`HTTP错误: ${res.status}`)
+            }
+            return res.json()
+          })
+          .then((historyData) => {
+            if (serverData.value && historyData.servers) {
+              serverData.value.servers = historyData.servers
+            }
+            historyLatestUpdated.value = Date.now()
+          })
+          .catch((err) => {
+            console.error('获取历史数据失败:', err)
+            // 历史数据获取失败不影响整体状态
+          })
+      }
+    })
+    .catch((err) => {
+      console.error('初始化数据获取失败:', err)
+      error.value = true
+    })
+    .finally(() => {
+      loading.value = false
+    })
+})
+
+// 修改fetchData函数，简化请求状态管理
+function fetchData(forceRefresh = false) {
+  // 如果已经在获取数据且不是强制刷新，则跳过
+  if (fetching.value && !forceRefresh)
+    return
+  
+  const isHistoryMode = settings.value.historyTimeRange !== '10m'
+  const startTime = getStartTimeParam()
+  
+  // 检查是否需要获取历史数据
+  const needFetchHistory = settings.value.showCpuChart && (
+    (isHistoryMode && forceRefresh) || 
+    (!isHistoryMode && (forceRefresh || Date.now() - historyLatestUpdated.value >= REALTIME_HISTORY_INTERVAL))
+  )
+  
+  // 检查是否需要获取实时数据
+  const needFetchRealtime = forceRefresh || Date.now() - latestUpdated.value >= MIN_FETCH_INTERVAL
+  
+  if (!needFetchHistory && !needFetchRealtime)
+    return
+  
+  // 设置获取状态
+  fetching.value = true
+  
+  // 获取实时数据的Promise
+  let realtimePromise = Promise.resolve()
+  if (needFetchRealtime) {
+    realtimePromise = fetch(JSON_API)
+      .then(res => res.json())
+      .then(data => {
+        if (serverData.value) {
+          serverData.value.current = {
+            updated: Date.now() / 1000,
+            servers: data.servers || []
+          }
+        } else {
+          serverData.value = {
+            current: {
+              updated: Date.now() / 1000,
+              servers: data.servers || []
+            },
+            servers: []
+          }
+        }
+        latestUpdated.value = Date.now()
+        error.value = false
+      })
+      .catch(err => {
+        console.error('获取实时数据失败:', err)
+        // 不设置error状态，避免界面显示错误
+      })
+  }
+  
+  // 获取历史数据的Promise
+  let historyPromise = Promise.resolve()
+  if (needFetchHistory) {
+    const historyUrl = `${HISTORY_API}${!isHistoryMode ? '' : `?start_time=${startTime}`}`
+    historyPromise = fetch(historyUrl)
+      .then(res => res.json())
+      .then(historyData => {
+        if (serverData.value && historyData.servers) {
+          serverData.value.servers = historyData.servers
+        }
+        historyLatestUpdated.value = Date.now()
+      })
+      .catch(err => {
+        console.error('获取历史数据失败:', err)
+      })
+  }
+  
+  // 等待所有请求完成
+  Promise.all([realtimePromise, historyPromise])
+    .finally(() => {
+      fetching.value = false
+    })
 }
 </script>
 
